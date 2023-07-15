@@ -6,6 +6,7 @@ using System.Diagnostics.SymbolStore;
 using TMPro;
 using Unity.Profiling;
 using Unity.VisualScripting;
+using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 using Random = UnityEngine.Random;
@@ -23,15 +24,26 @@ public class Percolation : MonoBehaviour
     Color[] _colors;
 
 
+    static readonly ProfilerMarker pmInitArrays = new ProfilerMarker("InitArrays");
+    static readonly ProfilerMarker pmLoopInitNodes = new ProfilerMarker("LoopInitNodes");
     void Start()
     {
-        _texture = new Texture2D(_width, _height);
-        _nodes = new Node[_width * _height];
-        _colors = new Color[_width * _height];
-        for (int i = 0; i < _nodes.Length; i++)
+        using (var pm = pmInitArrays.Auto())
         {
-            _nodes[i] = new Node { BottomChance = Random.Range(0f, 1f), RightChance = Random.Range(0f, 1f) };
+            _texture = new Texture2D(_width, _height);
+            _nodes = new Node[_width * _height];
+            _colors = new Color[_width * _height];
         }
+
+        using (var pm1 = pmLoopInitNodes.Auto())
+        {
+            for (int i = 0; i < _nodes.Length; i++)
+            {
+                _nodes[i] = new Node { BottomChance = Random.Range(0f, 1f), RightChance = Random.Range(0f, 1f) };
+            }
+        }
+
+        Debug.Break();
 
         StartCoroutine(UpdateTexture());
 
@@ -44,7 +56,7 @@ public class Percolation : MonoBehaviour
             _pValue += _rate;
             UpdateLinkOpenness();
             GenerateTexture();
-            yield return new WaitForSeconds(.1f);
+            yield return new WaitForEndOfFrame();
         }
     }
 
@@ -54,8 +66,7 @@ public class Percolation : MonoBehaviour
     static readonly ProfilerMarker pmSetTexture = new ProfilerMarker("SetTexture");
     static readonly ProfilerMarker pmFloodFill = new ProfilerMarker("FloodFill");
     static readonly ProfilerMarker pmSetPixels = new ProfilerMarker("SetPixel");
-    static readonly ProfilerMarker pm7 = new ProfilerMarker("Push");
-    static readonly ProfilerMarker pm8 = new ProfilerMarker("Pop");
+    static readonly ProfilerMarker pmPop = new ProfilerMarker("Pop");
 
     void GenerateTexture()
     {
@@ -101,6 +112,7 @@ public class Percolation : MonoBehaviour
 
     static readonly ProfilerMarker pmCheckAdjacent = new ProfilerMarker("CheckAdjacent");
     static readonly ProfilerMarker pmSetColorAndVisited = new ProfilerMarker("SetColorAndVisited");
+    static readonly ProfilerMarker pmPush = new ProfilerMarker("Push");
 
     void FloodFill(Texture2D texture, Vector2Int startPos, Color color, Stack<Vector2Int> stack)
     {
@@ -126,6 +138,7 @@ public class Percolation : MonoBehaviour
                 _nodes[adj.y * _width + adj.x].RightOpen)
             {
                 //Left is a node
+                using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
@@ -135,6 +148,7 @@ public class Percolation : MonoBehaviour
                 _nodes[pos.y * _width + pos.x].RightOpen)
             {
                 //Left is a node
+                using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
@@ -144,6 +158,7 @@ public class Percolation : MonoBehaviour
                 _nodes[pos.y * _width + pos.x].BottomOpen)
             {
                 //Left is a node
+                using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
@@ -153,6 +168,7 @@ public class Percolation : MonoBehaviour
                 _nodes[adj.y * _width + adj.x].BottomOpen)
             {
                 //Left is a node
+                using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
         }

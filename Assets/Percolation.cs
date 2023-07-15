@@ -14,17 +14,26 @@ using Random = UnityEngine.Random;
 public class Percolation : MonoBehaviour
 {
     [SerializeField] Renderer _renderer;
-    [SerializeField] float _lerpSpeed;
+    [SerializeField] float _lerp, _keyChangeRate;
     [SerializeField] int _width = 256, _height = 256;
+    [SerializeField] GUIStyle _textStyle;
 
-    float _pValue = 0, _desiredPValue = 0;
+    float _pValue = .5f, _desiredPValue = .5f;
     Texture2D _texture;
     Node[] _nodes;
     Color[] _colors;
-
+    int[] _seeds;
+    int _seedIndex;
 
     void Start()
     {
+        _seedIndex = -1;
+        _seeds = new int[10_000];
+        for (int i = 0; i < _seeds.Length; i++)
+        {
+            _seeds[i] = Random.Range(int.MinValue, int.MaxValue);
+        }
+
         Initialise();
         StartCoroutine(UpdateTextureContinuously());
     }
@@ -39,6 +48,8 @@ public class Percolation : MonoBehaviour
         _nodes = new Node[_width * _height];
         _colors = new Color[_width * _height];
 
+        _seedIndex++;
+        Random.InitState(_seeds[_seedIndex]);
         for (int i = 0; i < _nodes.Length; i++)
         {
             _nodes[i] = new Node { BottomChance = Random.Range(0f, 1f), RightChance = Random.Range(0f, 1f) };
@@ -47,8 +58,6 @@ public class Percolation : MonoBehaviour
 
     private void Update()
     {
-        //Smooth out user input
-        _pValue = Mathf.Lerp(_pValue, _desiredPValue, _lerpSpeed * Time.deltaTime);
 
         if (Input.GetKeyDown(KeyCode.Escape))
         {
@@ -58,14 +67,30 @@ public class Percolation : MonoBehaviour
         {
             Initialise();
         }
+        if (Input.GetKey(KeyCode.UpArrow))
+        {
+            _desiredPValue += _keyChangeRate * Time.deltaTime;
+        }
+        if (Input.GetKey(KeyCode.DownArrow))
+        {
+            _desiredPValue -= _keyChangeRate * Time.deltaTime;
+        }
+
+        _desiredPValue = Mathf.Clamp01(_desiredPValue);
+
+        //Smooth out changes to p value
+        _pValue = Mathf.Lerp(_pValue, _desiredPValue, _lerp * Time.deltaTime);
     }
 
     private void OnGUI()
     {
-        GUILayout.Label($"Frame time: {Time.deltaTime.ToString("0.000")}\nFPS: {(1 / Time.smoothDeltaTime).ToString("0")}\nP value: {_pValue.ToString("0.000")}");
+        
+        GUILayout.Label($"Frame time: {Time.deltaTime.ToString("0.000")}ms" +
+            $"\nP value: {_pValue.ToString("0.0000")}",
+            _textStyle);
 
         GUILayout.BeginArea(new Rect(20, 80, Screen.width * 0.2f, Screen.height - 100));
-        _desiredPValue = GUILayout.VerticalSlider(_desiredPValue, 0f, 1f);
+        _desiredPValue = 1 - GUILayout.VerticalSlider(1 - _desiredPValue, 0f, 1f);
         GUILayout.EndArea();
     }
 
@@ -94,6 +119,7 @@ public class Percolation : MonoBehaviour
                 {
                     nodes[i].Visited = false;
                 }
+
 
                 var stack = new Stack<(int, int)>();
                 for (int y = 0; y < _height; y++)
@@ -176,9 +202,9 @@ public class Percolation : MonoBehaviour
             _nodes[i].BottomOpen = _nodes[i].BottomChance < _pValue ? true : false;
         }
     }
-    static Color GetRandomColor(int count)
+    Color GetRandomColor(int count)
     {
-        Random.InitState(count);
+        Random.InitState(_seeds[_seedIndex] + count);
 
         return new Color(
             Random.Range(0f, 1f),

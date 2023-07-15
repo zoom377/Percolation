@@ -28,32 +28,23 @@ public class Percolation : MonoBehaviour
     static readonly ProfilerMarker pmLoopInitNodes = new ProfilerMarker("LoopInitNodes");
     void Start()
     {
-        using (var pm = pmInitArrays.Auto())
-        {
-            _texture = new Texture2D(_width, _height);
-            _nodes = new Node[_width * _height];
-            _colors = new Color[_width * _height];
-        }
+        _texture = new Texture2D(_width, _height);
+        _nodes = new Node[_width * _height];
+        _colors = new Color[_width * _height];
 
-        using (var pm1 = pmLoopInitNodes.Auto())
+        for (int i = 0; i < _nodes.Length; i++)
         {
-            for (int i = 0; i < _nodes.Length; i++)
-            {
-                _nodes[i] = new Node { BottomChance = Random.Range(0f, 1f), RightChance = Random.Range(0f, 1f) };
-            }
+            _nodes[i] = new Node { BottomChance = Random.Range(0f, 1f), RightChance = Random.Range(0f, 1f) };
         }
-
-        Debug.Break();
 
         StartCoroutine(UpdateTexture());
-
     }
 
     IEnumerator UpdateTexture()
     {
         while (_pValue <= 1f)
         {
-            _pValue += _rate;
+            _pValue += _rate * Time.deltaTime;
             UpdateLinkOpenness();
             GenerateTexture();
             yield return new WaitForEndOfFrame();
@@ -70,55 +61,39 @@ public class Percolation : MonoBehaviour
 
     void GenerateTexture()
     {
-        using (var pScope = pm1.Auto())
+        //Reset visited status of all nodes
+        for (int i = 0; i < _nodes.Length; i++)
         {
-            //Reset visited status of all nodes
-            for (int i = 0; i < _nodes.Length; i++)
-            {
-                _nodes[i].Visited = false;
-            }
+            _nodes[i].Visited = false;
         }
 
-        using (var pScope = pm2.Auto())
+        Stack<Vector2Int> stack = new Stack<Vector2Int>();
+        for (int y = 0; y < _height; y++)
         {
-            Stack<Vector2Int> stack = new Stack<Vector2Int>();
-            for (int y = 0; y < _height; y++)
+            for (int x = 0; x < _width; x++)
             {
-                for (int x = 0; x < _width; x++)
+                if (false == _nodes[Array2DToIndex(new Vector2Int(x, y), _width)].Visited)
                 {
-                    if (false == _nodes[Array2DToIndex(new Vector2Int(x, y), _width)].Visited)
-                    {
-                        FloodFill(_texture, new Vector2Int(x, y), GetRandomColor(), stack);
-                    }
+                    FloodFill(_texture, new Vector2Int(x, y), GetRandomColor(), stack);
                 }
             }
         }
 
-        using (var pm = pmSetPixels.Auto())
-        {
-            _texture.SetPixels(_colors);
-        }
-
-        using (var pScope = pmApplyTexture.Auto())
-        {
-            _texture.Apply();
-        }
-
-        using (var pScope = pmSetTexture.Auto())
-        {
-            _renderer.material.mainTexture = _texture;
-        }
+        _texture.SetPixels(_colors);
+        _texture.Apply();
+        _renderer.material.mainTexture = _texture;
     }
 
     static readonly ProfilerMarker pmCheckAdjacent = new ProfilerMarker("CheckAdjacent");
     static readonly ProfilerMarker pmSetColorAndVisited = new ProfilerMarker("SetColorAndVisited");
     static readonly ProfilerMarker pmPush = new ProfilerMarker("Push");
 
-    void FloodFill(Texture2D texture, Vector2Int startPos, Color color, Stack<Vector2Int> stack)
+    unsafe void FloodFill(Texture2D texture, Vector2Int startPos, Color color, Stack<Vector2Int> stack)
     {
         using var pscope = pmFloodFill.Auto();
 
-        //Stack<Vector2Int> stack = new Stack<Vector2Int>();
+        //fixed 
+
         stack.Push(startPos);
 
         Vector2Int pos, adj;
@@ -176,8 +151,6 @@ public class Percolation : MonoBehaviour
     static readonly ProfilerMarker pmUpdateLinkOpenness = new ProfilerMarker("pmUpdateLinkOpenness");
     void UpdateLinkOpenness()
     {
-        using var pm = pmUpdateLinkOpenness.Auto();
-
         for (int i = 0; i < _nodes.Length; i++)
         {
             _nodes[i].RightOpen = _nodes[i].RightChance < _pValue ? true : false;

@@ -332,9 +332,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _renderer: {fileID: 1891821864}
   _lerp: 2.5
-  _keyChangeRate: 0.005
-  _width: 512
-  _height: 512
+  _keyChangeRate: 0.01
   _textStyle:
     m_Name: 
     m_Normal:
@@ -392,7 +390,7 @@ MonoBehaviour:
     m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
     m_FontSize: 24
     m_FontStyle: 0
-    m_Alignment: 0
+    m_Alignment: 2
     m_WordWrap: 0
     m_RichText: 1
     m_TextClipping: 0

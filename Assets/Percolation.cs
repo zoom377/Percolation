@@ -15,18 +15,29 @@ public class Percolation : MonoBehaviour
 {
     [SerializeField] Renderer _renderer;
     [SerializeField] float _lerp, _keyChangeRate;
-    [SerializeField] int _width = 256, _height = 256;
     [SerializeField] GUIStyle _textStyle;
 
+    int _width = 256, _height = 256;
     float _pValue = .5f, _desiredPValue = .5f;
     Texture2D _texture;
     Node[] _nodes;
     Color[] _colors;
     int[] _seeds;
-    int _seedIndex;
+    Vector2Int[] _resolutions = new Vector2Int[]
+    {
+        new Vector2Int(32,32),
+        new Vector2Int(64,64),
+        new Vector2Int(128,128),
+        new Vector2Int(256,256),
+        new Vector2Int(512,512),
+    };
+    int _seedIndex = 0, _resolutionIndex = 2;
+
 
     void Start()
     {
+        _resolutionIndex = PlayerPrefs.GetInt("ResolutionIndex", 2);
+
         _seedIndex = -1;
         _seeds = new int[10_000];
         for (int i = 0; i < _seeds.Length; i++)
@@ -40,6 +51,9 @@ public class Percolation : MonoBehaviour
 
     private void Initialise()
     {
+        _width = _resolutions[_resolutionIndex].x;
+        _height = _resolutions[_resolutionIndex].y;
+
         _texture = new Texture2D(_width, _height)
         {
             filterMode = FilterMode.Point
@@ -49,6 +63,9 @@ public class Percolation : MonoBehaviour
         _colors = new Color[_width * _height];
 
         _seedIndex++;
+        if (_seedIndex >= _seeds.Length)
+            _seedIndex = 0;
+
         Random.InitState(_seeds[_seedIndex]);
         for (int i = 0; i < _nodes.Length; i++)
         {
@@ -76,6 +93,25 @@ public class Percolation : MonoBehaviour
             _desiredPValue -= _keyChangeRate * Time.deltaTime;
         }
 
+        if (Input.GetKeyDown(KeyCode.Equals))
+        {
+            if (_resolutionIndex < _resolutions.Length - 1)
+            {
+                _resolutionIndex++;
+                PlayerPrefs.SetInt("ResolutionIndex", _resolutionIndex);
+                Initialise();
+            }
+        }
+        else if (Input.GetKeyDown(KeyCode.Minus))
+        {
+            if (_resolutionIndex > 0)
+            {
+                _resolutionIndex--;
+                PlayerPrefs.SetInt("ResolutionIndex", _resolutionIndex);
+                Initialise();
+            }
+        }
+
         _desiredPValue = Mathf.Clamp01(_desiredPValue);
 
         //Smooth out changes to p value
@@ -84,9 +120,9 @@ public class Percolation : MonoBehaviour
 
     private void OnGUI()
     {
-        
+
         GUILayout.Label($"Resolution: {_width}x{_height}" +
-            $"\nFPS: {(1/Time.smoothDeltaTime).ToString("0")}" +
+            $"\nFPS: {(1 / Time.smoothDeltaTime).ToString("0")}" +
             $"\nP value: {_pValue.ToString("0.0000")}",
             _textStyle);
 

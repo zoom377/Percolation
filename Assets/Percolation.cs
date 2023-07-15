@@ -85,11 +85,12 @@ public class Percolation : MonoBehaviour
     private void OnGUI()
     {
         
-        GUILayout.Label($"Frame time: {Time.deltaTime.ToString("0.000")}ms" +
+        GUILayout.Label($"Resolution: {_width}x{_height}" +
+            $"\nFPS: {(1/Time.smoothDeltaTime).ToString("0")}" +
             $"\nP value: {_pValue.ToString("0.0000")}",
             _textStyle);
 
-        GUILayout.BeginArea(new Rect(20, 80, Screen.width * 0.2f, Screen.height - 100));
+        GUILayout.BeginArea(new Rect(20, 100, Screen.width * 0.2f, Screen.height - 120));
         _desiredPValue = 1 - GUILayout.VerticalSlider(1 - _desiredPValue, 0f, 1f);
         GUILayout.EndArea();
     }

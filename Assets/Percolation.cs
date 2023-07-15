@@ -59,7 +59,7 @@ public class Percolation : MonoBehaviour
     private void Update()
     {
 
-        if (Input.GetKeyDown(KeyCode.Escape))
+        if (Input.GetKeyDown(KeyCode.Escape) && Application.platform != RuntimePlatform.WebGLPlayer)
         {
             Application.Quit();
         }

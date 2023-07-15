@@ -79,7 +79,7 @@ public class Percolation : MonoBehaviour
                     {
                         if (false == nodes[Array2DToIndex(new Vector2Int(x, y), _width)].Visited)
                         {
-                            FloodFill(_texture, nodes, colors, (x, y), GetRandomColor(), stack);
+                            FloodFill(nodes, colors, (x, y), GetRandomColor(), stack);
                         }
                     }
                 }
@@ -95,7 +95,7 @@ public class Percolation : MonoBehaviour
     static readonly ProfilerMarker pmSetColorAndVisited = new ProfilerMarker("SetColorAndVisited");
     static readonly ProfilerMarker pmPush = new ProfilerMarker("Push");
 
-    unsafe void FloodFill(Texture2D texture, Node* nodes, Color* colors, (int x, int y) pos, Color color, Stack<(int, int)> stack)
+    unsafe void FloodFill(Node* nodes, Color* colors, (int x, int y) pos, Color color, Stack<(int, int)> stack)
     {
         using var pscope = pmFloodFill.Auto();
 
@@ -161,6 +161,10 @@ public class Percolation : MonoBehaviour
         }
     }
 
+    private void OnGUI()
+    {
+        GUILayout.Label($"Frame time:{Time.deltaTime}\nFPS:{1/Time.smoothDeltaTime}");
+    }
 
     static readonly ProfilerMarker pmUpdateLinkOpenness = new ProfilerMarker("pmUpdateLinkOpenness");
     void UpdateLinkOpenness()

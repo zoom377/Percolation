@@ -331,10 +331,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _renderer: {fileID: 1891821864}
-  _width: 256
-  _height: 256
   _pValue: 0.2
-  _rate: 0.0025
+  _rate: 0.02
 --- !u!4 &1249861921
 Transform:
   m_ObjectHideFlags: 0

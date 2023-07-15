@@ -3,13 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.SymbolStore;
-using System.Drawing;
 using TMPro;
 using Unity.Profiling;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
-using Color = UnityEngine.Color;
 using Debug = UnityEngine.Debug;
 using Random = UnityEngine.Random;
 
@@ -21,38 +19,43 @@ public class Percolation : MonoBehaviour
 
     const int _width = 256, _height = 256;
 
-    //Texture2D _texture;
-    //Node[] _nodes;
-    //Color[] _colors;
+    Texture2D _texture;
+    Node[] _nodes;
+    Color[] _colors;
 
 
     static readonly ProfilerMarker pmInitArrays = new ProfilerMarker("InitArrays");
     static readonly ProfilerMarker pmLoopInitNodes = new ProfilerMarker("LoopInitNodes");
     void Start()
     {
-        StartCoroutine(UpdateTextureContinuously());
-    }
-
-    IEnumerator UpdateTextureContinuously()
-    {
-
-        Texture2D texture = new Texture2D(_width, _height);
-        Span<Node> nodes = stackalloc Node[_width * _height];
-        Span<Color> colors = stackalloc Color[_width * _height];
+        using (var pm = pmInitArrays.Auto())
+        {
+            _texture = new Texture2D(_width, _height);
+            _nodes = new Node[_width * _height];
+            _colors = new Color[_width * _height];
+        }
 
         using (var pm1 = pmLoopInitNodes.Auto())
         {
-            for (int i = 0; i < nodes.Length; i++)
+            for (int i = 0; i < _nodes.Length; i++)
             {
-                nodes[i] = new Node { BottomChance = Random.Range(0f, 1f), RightChance = Random.Range(0f, 1f) };
+                _nodes[i] = new Node { BottomChance = Random.Range(0f, 1f), RightChance = Random.Range(0f, 1f) };
             }
         }
 
+        Debug.Break();
+
+        StartCoroutine(UpdateTexture());
+
+    }
+
+    IEnumerator UpdateTexture()
+    {
         while (_pValue <= 1f)
         {
-            _pValue += _rate * Time.deltaTime;
-            UpdateLinkOpenness(nodes);
-            GenerateTexture(texture, nodes, colors);
+            _pValue += _rate;
+            UpdateLinkOpenness();
+            GenerateTexture();
             yield return new WaitForEndOfFrame();
         }
     }
@@ -65,14 +68,14 @@ public class Percolation : MonoBehaviour
     static readonly ProfilerMarker pmSetPixels = new ProfilerMarker("SetPixel");
     static readonly ProfilerMarker pmPop = new ProfilerMarker("Pop");
 
-    void GenerateTexture(Texture2D texture, Span<Node> nodes, Span<Color> colors)
+    void GenerateTexture()
     {
         using (var pScope = pm1.Auto())
         {
             //Reset visited status of all nodes
-            for (int i = 0; i < nodes.Length; i++)
+            for (int i = 0; i < _nodes.Length; i++)
             {
-                nodes[i].Visited = false;
+                _nodes[i].Visited = false;
             }
         }
 
@@ -83,9 +86,9 @@ public class Percolation : MonoBehaviour
             {
                 for (int x = 0; x < _width; x++)
                 {
-                    if (false == nodes[Array2DToIndex(new Vector2Int(x, y), _width)].Visited)
+                    if (false == _nodes[Array2DToIndex(new Vector2Int(x, y), _width)].Visited)
                     {
-                        FloodFill(texture, nodes, colors ,new Vector2Int(x, y), GetRandomColor(), stack);
+                        FloodFill(_texture, new Vector2Int(x, y), GetRandomColor(), stack);
                     }
                 }
             }
@@ -93,17 +96,17 @@ public class Percolation : MonoBehaviour
 
         using (var pm = pmSetPixels.Auto())
         {
-            texture.SetPixels(colors.ToArray());
+            _texture.SetPixels(_colors);
         }
 
         using (var pScope = pmApplyTexture.Auto())
         {
-            texture.Apply();
+            _texture.Apply();
         }
 
         using (var pScope = pmSetTexture.Auto())
         {
-            _renderer.material.mainTexture = texture;
+            _renderer.material.mainTexture = _texture;
         }
     }
 
@@ -111,10 +114,11 @@ public class Percolation : MonoBehaviour
     static readonly ProfilerMarker pmSetColorAndVisited = new ProfilerMarker("SetColorAndVisited");
     static readonly ProfilerMarker pmPush = new ProfilerMarker("Push");
 
-    void FloodFill(Texture2D texture, Span<Node> nodes, Span<Color> colors, Vector2Int startPos, Color color, Stack<Vector2Int> stack)
+    void FloodFill(Texture2D texture, Vector2Int startPos, Color color, Stack<Vector2Int> stack)
     {
         using var pscope = pmFloodFill.Auto();
 
+        //Stack<Vector2Int> stack = new Stack<Vector2Int>();
         stack.Push(startPos);
 
         Vector2Int pos, adj;
@@ -122,16 +126,16 @@ public class Percolation : MonoBehaviour
         {
             using (var pm1 = pmSetColorAndVisited.Auto())
             {
-                nodes[pos.y * _width + pos.x].Visited = true;
-                colors[pos.y * _width + pos.x] = color;
+                _nodes[pos.y * _width + pos.x].Visited = true;
+                _colors[pos.y * _width + pos.x] = color;
             }
 
             using var pm = pmCheckAdjacent.Auto();
 
             adj = pos + Vector2Int.left;
             if (adj.x >= 0 &&
-                false == nodes[adj.y * _width + adj.x].Visited &&
-                nodes[adj.y * _width + adj.x].RightOpen)
+                false == _nodes[adj.y * _width + adj.x].Visited &&
+                _nodes[adj.y * _width + adj.x].RightOpen)
             {
                 //Left is a node
                 using var pm2 = pmPush.Auto();
@@ -140,8 +144,8 @@ public class Percolation : MonoBehaviour
 
             adj = pos + Vector2Int.right;
             if (adj.x < _width &&
-                false == nodes[adj.y * _width + adj.x].Visited &&
-                nodes[pos.y * _width + pos.x].RightOpen)
+                false == _nodes[adj.y * _width + adj.x].Visited &&
+                _nodes[pos.y * _width + pos.x].RightOpen)
             {
                 //Left is a node
                 using var pm2 = pmPush.Auto();
@@ -150,8 +154,8 @@ public class Percolation : MonoBehaviour
 
             adj = pos + Vector2Int.down;
             if (adj.y >= 0 &&
-                false == nodes[adj.y * _width + adj.x].Visited &&
-                nodes[pos.y * _width + pos.x].BottomOpen)
+                false == _nodes[adj.y * _width + adj.x].Visited &&
+                _nodes[pos.y * _width + pos.x].BottomOpen)
             {
                 //Left is a node
                 using var pm2 = pmPush.Auto();
@@ -160,8 +164,8 @@ public class Percolation : MonoBehaviour
 
             adj = pos + Vector2Int.up;
             if (adj.y < _height &&
-                false == nodes[adj.y * _width + adj.x].Visited &&
-                nodes[adj.y * _width + adj.x].BottomOpen)
+                false == _nodes[adj.y * _width + adj.x].Visited &&
+                _nodes[adj.y * _width + adj.x].BottomOpen)
             {
                 //Left is a node
                 using var pm2 = pmPush.Auto();
@@ -170,24 +174,24 @@ public class Percolation : MonoBehaviour
         }
     }
     static readonly ProfilerMarker pmUpdateLinkOpenness = new ProfilerMarker("pmUpdateLinkOpenness");
-    void UpdateLinkOpenness(Span<Node> nodes)
+    void UpdateLinkOpenness()
     {
         using var pm = pmUpdateLinkOpenness.Auto();
 
-        for (int i = 0; i < nodes.Length; i++)
+        for (int i = 0; i < _nodes.Length; i++)
         {
-            nodes[i].RightOpen = nodes[i].RightChance < _pValue ? true : false;
-            nodes[i].BottomOpen = nodes[i].BottomChance < _pValue ? true : false;
+            _nodes[i].RightOpen = _nodes[i].RightChance < _pValue ? true : false;
+            _nodes[i].BottomOpen = _nodes[i].BottomChance < _pValue ? true : false;
         }
     }
 
     static readonly ProfilerMarker pmGetNode = new ProfilerMarker("GetNode");
 
-    //ref Node GetNode(Vector2Int pos)
-    //{
-    //    using var pm = pmGetNode.Auto();
-    //    return ref _nodes[Array2DToIndex(pos, _width)];
-    //}
+    ref Node GetNode(Vector2Int pos)
+    {
+        using var pm = pmGetNode.Auto();
+        return ref _nodes[Array2DToIndex(pos, _width)];
+    }
 
     static int Array2DToIndex(Vector2Int position, int width)
     {

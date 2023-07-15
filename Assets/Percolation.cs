@@ -59,88 +59,100 @@ public class Percolation : MonoBehaviour
     static readonly ProfilerMarker pmSetPixels = new ProfilerMarker("SetPixel");
     static readonly ProfilerMarker pmPop = new ProfilerMarker("Pop");
 
-    void GenerateTexture()
+    unsafe void GenerateTexture()
     {
-        //Reset visited status of all nodes
-        for (int i = 0; i < _nodes.Length; i++)
+        fixed (Color* colors = _colors)
         {
-            _nodes[i].Visited = false;
-        }
-
-        Stack<Vector2Int> stack = new Stack<Vector2Int>();
-        for (int y = 0; y < _height; y++)
-        {
-            for (int x = 0; x < _width; x++)
+            fixed (Node* nodes = _nodes)
             {
-                if (false == _nodes[Array2DToIndex(new Vector2Int(x, y), _width)].Visited)
+
+                //Reset visited status of all nodes
+                for (int i = 0; i < _nodes.Length; i++)
                 {
-                    FloodFill(_texture, new Vector2Int(x, y), GetRandomColor(), stack);
+                    nodes[i].Visited = false;
                 }
+
+                var stack = new Stack<(int, int)>();
+                for (int y = 0; y < _height; y++)
+                {
+                    for (int x = 0; x < _width; x++)
+                    {
+                        if (false == nodes[Array2DToIndex(new Vector2Int(x, y), _width)].Visited)
+                        {
+                            FloodFill(_texture, nodes, colors, (x, y), GetRandomColor(), stack);
+                        }
+                    }
+                }
+
+                _texture.SetPixels(_colors);
+                _texture.Apply();
+                _renderer.material.mainTexture = _texture;
             }
         }
-
-        _texture.SetPixels(_colors);
-        _texture.Apply();
-        _renderer.material.mainTexture = _texture;
     }
 
     static readonly ProfilerMarker pmCheckAdjacent = new ProfilerMarker("CheckAdjacent");
     static readonly ProfilerMarker pmSetColorAndVisited = new ProfilerMarker("SetColorAndVisited");
     static readonly ProfilerMarker pmPush = new ProfilerMarker("Push");
 
-    unsafe void FloodFill(Texture2D texture, Vector2Int startPos, Color color, Stack<Vector2Int> stack)
+    unsafe void FloodFill(Texture2D texture, Node* nodes, Color* colors, (int x, int y) pos, Color color, Stack<(int, int)> stack)
     {
         using var pscope = pmFloodFill.Auto();
 
-        //fixed 
+        stack.Push(pos);
+        (int x, int y) adj;
 
-        stack.Push(startPos);
-
-        Vector2Int pos, adj;
         while (stack.TryPop(out pos))
         {
             using (var pm1 = pmSetColorAndVisited.Auto())
             {
-                _nodes[pos.y * _width + pos.x].Visited = true;
-                _colors[pos.y * _width + pos.x] = color;
+                nodes[pos.y * _width + pos.x].Visited = true;
+                colors[pos.y * _width + pos.x] = color;
             }
 
             using var pm = pmCheckAdjacent.Auto();
 
-            adj = pos + Vector2Int.left;
+            //left
+            adj = (pos.x - 1, pos.y);
             if (adj.x >= 0 &&
-                false == _nodes[adj.y * _width + adj.x].Visited &&
-                _nodes[adj.y * _width + adj.x].RightOpen)
+                false == nodes[adj.y * _width + adj.x].Visited &&
+                nodes[adj.y * _width + adj.x].RightOpen)
             {
                 //Left is a node
                 using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
-            adj = pos + Vector2Int.right;
+            //right
+            //adj = pos + Vector2Int.right;
+            adj = (pos.x + 1, pos.y);
             if (adj.x < _width &&
-                false == _nodes[adj.y * _width + adj.x].Visited &&
-                _nodes[pos.y * _width + pos.x].RightOpen)
+                false == nodes[adj.y * _width + adj.x].Visited &&
+                nodes[pos.y * _width + pos.x].RightOpen)
             {
                 //Left is a node
                 using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
-            adj = pos + Vector2Int.down;
+            //down
+            //adj = pos + Vector2Int.down;
+            adj = (pos.x, pos.y - 1);
             if (adj.y >= 0 &&
-                false == _nodes[adj.y * _width + adj.x].Visited &&
-                _nodes[pos.y * _width + pos.x].BottomOpen)
+                false == nodes[adj.y * _width + adj.x].Visited &&
+                nodes[pos.y * _width + pos.x].BottomOpen)
             {
                 //Left is a node
                 using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
-            adj = pos + Vector2Int.up;
+            //up
+            //adj = pos + Vector2Int.up;
+            adj = (pos.x, pos.y + 1);
             if (adj.y < _height &&
-                false == _nodes[adj.y * _width + adj.x].Visited &&
-                _nodes[adj.y * _width + adj.x].BottomOpen)
+                false == nodes[adj.y * _width + adj.x].Visited &&
+                nodes[adj.y * _width + adj.x].BottomOpen)
             {
                 //Left is a node
                 using var pm2 = pmPush.Auto();
@@ -148,6 +160,8 @@ public class Percolation : MonoBehaviour
             }
         }
     }
+
+
     static readonly ProfilerMarker pmUpdateLinkOpenness = new ProfilerMarker("pmUpdateLinkOpenness");
     void UpdateLinkOpenness()
     {

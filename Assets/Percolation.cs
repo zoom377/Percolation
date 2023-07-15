@@ -14,21 +14,28 @@ using Random = UnityEngine.Random;
 public class Percolation : MonoBehaviour
 {
     [SerializeField] Renderer _renderer;
-    [SerializeField] float _pValue = 0;
-    [SerializeField] float _rate;
+    [SerializeField] float _lerpSpeed;
+    [SerializeField] int _width = 256, _height = 256;
 
-    const int _width = 256, _height = 256;
-
+    float _pValue = 0, _desiredPValue = 0;
     Texture2D _texture;
     Node[] _nodes;
     Color[] _colors;
 
 
-    static readonly ProfilerMarker pmInitArrays = new ProfilerMarker("InitArrays");
-    static readonly ProfilerMarker pmLoopInitNodes = new ProfilerMarker("LoopInitNodes");
     void Start()
     {
-        _texture = new Texture2D(_width, _height);
+        Initialise();
+        StartCoroutine(UpdateTextureContinuously());
+    }
+
+    private void Initialise()
+    {
+        _texture = new Texture2D(_width, _height)
+        {
+            filterMode = FilterMode.Point
+        };
+
         _nodes = new Node[_width * _height];
         _colors = new Color[_width * _height];
 
@@ -36,35 +43,51 @@ public class Percolation : MonoBehaviour
         {
             _nodes[i] = new Node { BottomChance = Random.Range(0f, 1f), RightChance = Random.Range(0f, 1f) };
         }
-
-        StartCoroutine(UpdateTexture());
     }
 
-    IEnumerator UpdateTexture()
+    private void Update()
     {
-        while (_pValue <= 1f)
+        //Smooth out user input
+        _pValue = Mathf.Lerp(_pValue, _desiredPValue, _lerpSpeed * Time.deltaTime);
+
+        if (Input.GetKeyDown(KeyCode.Escape))
         {
-            _pValue += _rate * Time.deltaTime;
-            UpdateLinkOpenness();
-            GenerateTexture();
+            Application.Quit();
+        }
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            Initialise();
+        }
+    }
+
+    private void OnGUI()
+    {
+        GUILayout.Label($"Frame time: {Time.deltaTime.ToString("0.000")}\nFPS: {(1 / Time.smoothDeltaTime).ToString("0")}\nP value: {_pValue.ToString("0.000")}");
+
+        GUILayout.BeginArea(new Rect(20, 80, Screen.width * 0.2f, Screen.height - 100));
+        _desiredPValue = GUILayout.VerticalSlider(_desiredPValue, 0f, 1f);
+        GUILayout.EndArea();
+    }
+
+    IEnumerator UpdateTextureContinuously()
+    {
+        while (true)
+        {
+            UpdateTexture();
             yield return new WaitForEndOfFrame();
         }
     }
 
-    static readonly ProfilerMarker pm1 = new ProfilerMarker("ResetNode");
-    static readonly ProfilerMarker pm2 = new ProfilerMarker("SearchForUnVisited");
-    static readonly ProfilerMarker pmApplyTexture = new ProfilerMarker("ApplyTexture");
-    static readonly ProfilerMarker pmSetTexture = new ProfilerMarker("SetTexture");
-    static readonly ProfilerMarker pmFloodFill = new ProfilerMarker("FloodFill");
-    static readonly ProfilerMarker pmSetPixels = new ProfilerMarker("SetPixel");
-    static readonly ProfilerMarker pmPop = new ProfilerMarker("Pop");
-
-    unsafe void GenerateTexture()
+    unsafe void UpdateTexture()
     {
+        //Unsafe stuff hopefully removes bounds checking for performance
+        //  Flood fill gets called about 30,000 times per frame with a 256x256 texture
+        //  Didn't notice a huge difference from the fixed scope.
         fixed (Color* colors = _colors)
         {
             fixed (Node* nodes = _nodes)
             {
+                UpdateLinkOpenness();
 
                 //Reset visited status of all nodes
                 for (int i = 0; i < _nodes.Length; i++)
@@ -77,9 +100,9 @@ public class Percolation : MonoBehaviour
                 {
                     for (int x = 0; x < _width; x++)
                     {
-                        if (false == nodes[Array2DToIndex(new Vector2Int(x, y), _width)].Visited)
+                        if (false == nodes[y * _width + x].Visited)
                         {
-                            FloodFill(nodes, colors, (x, y), GetRandomColor(), stack);
+                            FloodFill(nodes, colors, (x, y), GetRandomColor(y * _width + x), stack);
                         }
                     }
                 }
@@ -91,26 +114,21 @@ public class Percolation : MonoBehaviour
         }
     }
 
-    static readonly ProfilerMarker pmCheckAdjacent = new ProfilerMarker("CheckAdjacent");
-    static readonly ProfilerMarker pmSetColorAndVisited = new ProfilerMarker("SetColorAndVisited");
-    static readonly ProfilerMarker pmPush = new ProfilerMarker("Push");
-
     unsafe void FloodFill(Node* nodes, Color* colors, (int x, int y) pos, Color color, Stack<(int, int)> stack)
     {
-        using var pscope = pmFloodFill.Auto();
-
         stack.Push(pos);
+
+        //Tuples were significantly faster than Vector2Ints (In editor at least).
         (int x, int y) adj;
 
+        //This loop runs about 60,000 times per frame
         while (stack.TryPop(out pos))
         {
-            using (var pm1 = pmSetColorAndVisited.Auto())
-            {
-                nodes[pos.y * _width + pos.x].Visited = true;
-                colors[pos.y * _width + pos.x] = color;
-            }
+            nodes[pos.y * _width + pos.x].Visited = true;
+            colors[pos.y * _width + pos.x] = color;
 
-            using var pm = pmCheckAdjacent.Auto();
+            //Previously had a function that converted 2d coords to flattened array index.
+            //  Was much slower than just inlining.
 
             //left
             adj = (pos.x - 1, pos.y);
@@ -118,55 +136,38 @@ public class Percolation : MonoBehaviour
                 false == nodes[adj.y * _width + adj.x].Visited &&
                 nodes[adj.y * _width + adj.x].RightOpen)
             {
-                //Left is a node
-                using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
             //right
-            //adj = pos + Vector2Int.right;
             adj = (pos.x + 1, pos.y);
             if (adj.x < _width &&
                 false == nodes[adj.y * _width + adj.x].Visited &&
                 nodes[pos.y * _width + pos.x].RightOpen)
             {
-                //Left is a node
-                using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
             //down
-            //adj = pos + Vector2Int.down;
             adj = (pos.x, pos.y - 1);
             if (adj.y >= 0 &&
                 false == nodes[adj.y * _width + adj.x].Visited &&
                 nodes[pos.y * _width + pos.x].BottomOpen)
             {
-                //Left is a node
-                using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
 
             //up
-            //adj = pos + Vector2Int.up;
             adj = (pos.x, pos.y + 1);
             if (adj.y < _height &&
                 false == nodes[adj.y * _width + adj.x].Visited &&
                 nodes[adj.y * _width + adj.x].BottomOpen)
             {
-                //Left is a node
-                using var pm2 = pmPush.Auto();
                 stack.Push(adj);
             }
         }
     }
 
-    private void OnGUI()
-    {
-        GUILayout.Label($"Frame time:{Time.deltaTime}\nFPS:{1/Time.smoothDeltaTime}");
-    }
-
-    static readonly ProfilerMarker pmUpdateLinkOpenness = new ProfilerMarker("pmUpdateLinkOpenness");
     void UpdateLinkOpenness()
     {
         for (int i = 0; i < _nodes.Length; i++)
@@ -175,28 +176,15 @@ public class Percolation : MonoBehaviour
             _nodes[i].BottomOpen = _nodes[i].BottomChance < _pValue ? true : false;
         }
     }
-
-    static readonly ProfilerMarker pmGetNode = new ProfilerMarker("GetNode");
-
-    ref Node GetNode(Vector2Int pos)
+    static Color GetRandomColor(int count)
     {
-        using var pm = pmGetNode.Auto();
-        return ref _nodes[Array2DToIndex(pos, _width)];
-    }
+        Random.InitState(count);
 
-    static int Array2DToIndex(Vector2Int position, int width)
-    {
-        return position.y * width + position.x;
-    }
-
-    static Color GetRandomColor()
-    {
         return new Color(
             Random.Range(0f, 1f),
             Random.Range(0f, 1f),
             Random.Range(0f, 1f),
-            1f
-            );
+            1f);
     }
 
 
